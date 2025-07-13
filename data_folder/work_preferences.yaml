@@ -24,13 +24,26 @@ date:
   month: false
   week: false
   24_hours: true
-
 positions:
-  - Software engineer
+- Software Engineer
+- Flutter Developer
+- Full Stack Developer
+- Mobile App Developer
+- MERN Stack Developer
+- Frontend Developer
+- Backend Developer
+- React Developer
+- Node.js Developer
 
 locations:
-  - Germany
-
+- India
+- Remote
+- United States
+- Canada
+- United Kingdom
+- Germany
+- Singapore
+- Dubai
 apply_once_at_company: true
 
 distance: 100

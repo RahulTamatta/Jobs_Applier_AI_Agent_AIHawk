@@ -6,8 +6,8 @@ import shutil
 from dataclasses import asdict
 
 from config import JOB_APPLICATIONS_DIR
-from job import Job
-from job_application import JobApplication
+from src.job import Job
+from src.job_application import JobApplication
 
 # Base directory where all applications will be saved
 BASE_DIR = JOB_APPLICATIONS_DIR
@@ -24,7 +24,8 @@ class ApplicationSaver:
         job = self.job_application.job
 
         # Create a unique directory name using the application ID and company name
-        dir_name = f"{job.id} - {job.company} {job.title}"
+        job_id = job.link.split('/')[-1] if job.link else 'unknown'
+        dir_name = f"{job_id} - {job.company} - {job.role}"
         dir_path = os.path.join(BASE_DIR, dir_name)
 
         # Create the directory if it doesn't exist
