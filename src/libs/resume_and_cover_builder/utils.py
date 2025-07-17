@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Dict, List
 from langchain_core.messages.ai import AIMessage
 from langchain_core.prompt_values import StringPromptValue
-from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from .config import global_config
 from loguru import logger
 from requests.exceptions import HTTPError as HTTPStatusError
@@ -18,7 +18,7 @@ from requests.exceptions import HTTPError as HTTPStatusError
 
 class LLMLogger:
 
-    def __init__(self, llm: ChatOpenAI):
+    def __init__(self, llm: ChatOllama):
         self.llm = llm
 
     @staticmethod
@@ -76,7 +76,7 @@ class LLMLogger:
 
 class LoggerChatModel:
 
-    def __init__(self, llm: ChatOpenAI):
+    def __init__(self, llm: ChatOllama):
         self.llm = llm
 
     def __call__(self, messages: List[Dict[str, str]]) -> str:

@@ -7,7 +7,7 @@ import textwrap
 from src.libs.resume_and_cover_builder.utils import LoggerChatModel
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from loguru import logger
@@ -26,8 +26,8 @@ logger.add(log_path / "gpt_resume.log", rotation="1 day", compression="zip", ret
 class LLMResumer:
     def __init__(self, openai_api_key, strings):
         self.llm_cheap = LoggerChatModel(
-            ChatOpenAI(
-                model_name="gpt-4o-mini", openai_api_key=openai_api_key, temperature=0.4
+            ChatOllama(
+                model="gemma3:1b", base_url="http://localhost:11434", temperature=0.4
             )
         )
         self.strings = strings
@@ -243,80 +243,215 @@ class LLMResumer:
         
         return output
 
+    def generate_fallback_html_resume(self) -> str:
+        """Generate a fallback HTML resume when LLM fails"""
+        logger.warning("Using fallback HTML generation due to LLM failure")
+        
+        personal_info = self.resume.personal_information
+        education = self.resume.education_details[0] if self.resume.education_details else None
+        experience = self.resume.experience_details[:3] if self.resume.experience_details else []
+        projects = self.resume.projects[:2] if self.resume.projects else []
+        achievements = self.resume.achievements[:3] if self.resume.achievements else []
+        certifications = self.resume.certifications[:3] if self.resume.certifications else []
+        languages = self.resume.languages if self.resume.languages else []
+        
+        # Build header
+        header_html = f"""
+        <header>
+            <h1>{personal_info.name} {personal_info.surname}</h1>
+            <div class="contact-info">
+                <p><span>{personal_info.city}, {personal_info.country}</span></p>
+                <p><span>{personal_info.phone_prefix} {personal_info.phone}</span></p>
+                <p><span>{personal_info.email}</span></p>
+                <p><a href="{personal_info.linkedin}">LinkedIn</a></p>
+                <p><a href="{personal_info.github}">GitHub</a></p>
+            </div>
+        </header>"""
+        
+        # Build education
+        education_html = ""
+        if education:
+            education_html = f"""
+        <section id="education">
+            <h2>Education</h2>
+            <div class="entry">
+                <div class="entry-header">
+                    <span class="entry-name">{education.institution}</span>
+                    <span class="entry-location">{personal_info.city}, {personal_info.country}</span>
+                </div>
+                <div class="entry-details">
+                    <span class="entry-title">{education.education_level} in {education.field_of_study}</span>
+                    <span class="entry-year">{education.start_date} – {education.year_of_completion}</span>
+                </div>
+            </div>
+        </section>"""
+        
+        # Build work experience
+        work_html = ""
+        if experience:
+            work_html = "<section id='work-experience'><h2>Work Experience</h2>"
+            for exp in experience:
+                responsibilities = []
+                if hasattr(exp, 'key_responsibilities') and exp.key_responsibilities:
+                    for resp in exp.key_responsibilities:
+                        if isinstance(resp, dict):
+                            responsibilities.extend(resp.values())
+                        else:
+                            responsibilities.append(str(resp))
+                
+                resp_html = "\n".join([f"<li>{resp}</li>" for resp in responsibilities[:3]])
+                
+                work_html += f"""
+            <div class="entry">
+                <div class="entry-header">
+                    <span class="entry-name">{exp.company}</span>
+                    <span class="entry-location">{exp.location}</span>
+                </div>
+                <div class="entry-details">
+                    <span class="entry-title">{exp.position}</span>
+                    <span class="entry-year">{exp.employment_period}</span>
+                </div>
+                <ul class="compact-list">
+                    {resp_html}
+                </ul>
+            </div>"""
+            work_html += "</section>"
+        
+        # Build skills
+        skills_html = ""
+        if languages or any([experience, education]):
+            skills_html = """
+        <section id="skills-languages">
+            <h2>Skills & Languages</h2>
+            <div class="two-column">
+                <ul class="compact-list">
+                    <li>Flutter Development</li>
+                    <li>React.js</li>
+                    <li>Node.js</li>
+                    <li>MongoDB</li>
+                    <li>Full-Stack Development</li>
+                </ul>
+                <ul class="compact-list">
+                    <li>Mobile App Development</li>
+                    <li>MERN Stack</li>
+                    <li>UI/UX Design</li>
+                    <li>Database Systems</li>"""
+            if languages:
+                lang_text = ", ".join([f"{lang.language} ({lang.proficiency})" for lang in languages])
+                skills_html += f"<li><strong>Languages:</strong> {lang_text}</li>"
+            skills_html += """
+                </ul>
+            </div>
+        </section>"""
+        
+        full_resume = f"""
+    <body>
+        {header_html}
+        <main>
+            {education_html}
+            {work_html}
+            {skills_html}
+        </main>
+    </body>"""
+        
+        return full_resume
+
     def generate_html_resume(self) -> str:
         """
         Generate the full HTML resume based on the resume object.
         Returns:
             str: The generated HTML resume.
         """
-        def header_fn():
-            if self.resume.personal_information:
-                return self.generate_header()
-            return ""
+        try:
+            def header_fn():
+                if self.resume.personal_information:
+                    return self.generate_header()
+                return ""
 
-        def education_fn():
-            if self.resume.education_details:
-                return self.generate_education_section()
-            return ""
+            def education_fn():
+                if self.resume.education_details:
+                    return self.generate_education_section()
+                return ""
 
-        def work_experience_fn():
-            if self.resume.experience_details:
-                return self.generate_work_experience_section()
-            return ""
+            def work_experience_fn():
+                if self.resume.experience_details:
+                    return self.generate_work_experience_section()
+                return ""
 
-        def projects_fn():
-            if self.resume.projects:
-                return self.generate_projects_section()
-            return ""
+            def projects_fn():
+                if self.resume.projects:
+                    return self.generate_projects_section()
+                return ""
 
-        def achievements_fn():
-            if self.resume.achievements:
-                return self.generate_achievements_section()
-            return ""
-        
-        def certifications_fn():
-            if self.resume.certifications:
-                return self.generate_certifications_section()
-            return ""
+            def achievements_fn():
+                if self.resume.achievements:
+                    return self.generate_achievements_section()
+                return ""
+            
+            def certifications_fn():
+                if self.resume.certifications:
+                    return self.generate_certifications_section()
+                return ""
 
-        def additional_skills_fn():
-            if (self.resume.experience_details or self.resume.education_details or
-                self.resume.languages or self.resume.interests):
-                return self.generate_additional_skills_section()
-            return ""
+            def additional_skills_fn():
+                if (self.resume.experience_details or self.resume.education_details or
+                    self.resume.languages or self.resume.interests):
+                    return self.generate_additional_skills_section()
+                return ""
 
-        # Create a dictionary to map the function names to their respective callables
-        functions = {
-            "header": header_fn,
-            "education": education_fn,
-            "work_experience": work_experience_fn,
-            "projects": projects_fn,
-            "achievements": achievements_fn,
-            "certifications": certifications_fn,
-            "additional_skills": additional_skills_fn,
-        }
+            # Create a dictionary to map the function names to their respective callables
+            functions = {
+                "header": header_fn,
+                "education": education_fn,
+                "work_experience": work_experience_fn,
+                "projects": projects_fn,
+                "achievements": achievements_fn,
+                "certifications": certifications_fn,
+                "additional_skills": additional_skills_fn,
+            }
 
-        # Use ThreadPoolExecutor to run the functions in parallel
-        with ThreadPoolExecutor() as executor:
-            future_to_section = {executor.submit(fn): section for section, fn in functions.items()}
+            # Use ThreadPoolExecutor to run the functions in parallel with timeout
             results = {}
-            for future in as_completed(future_to_section):
-                section = future_to_section[future]
-                try:
-                    result = future.result()
-                    if result:
-                        results[section] = result
-                except Exception as exc:
-                    logger.error(f'{section} raised an exception: {exc}')
-        full_resume = "<body>\n"
-        full_resume += f"  {results.get('header', '')}\n"
-        full_resume += "  <main>\n"
-        full_resume += f"    {results.get('education', '')}\n"
-        full_resume += f"    {results.get('work_experience', '')}\n"
-        full_resume += f"    {results.get('projects', '')}\n"
-        full_resume += f"    {results.get('achievements', '')}\n"
-        full_resume += f"    {results.get('certifications', '')}\n"
-        full_resume += f"    {results.get('additional_skills', '')}\n"
-        full_resume += "  </main>\n"
-        full_resume += "</body>"
-        return full_resume
+            try:
+                with ThreadPoolExecutor() as executor:
+                    future_to_section = {executor.submit(fn): section for section, fn in functions.items()}
+                    for future in as_completed(future_to_section, timeout=60):  # 60 second timeout
+                        section = future_to_section[future]
+                        try:
+                            result = future.result(timeout=10)  # 10 second timeout per section
+                            if result and result.strip():
+                                results[section] = result
+                        except Exception as exc:
+                            logger.error(f'{section} raised an exception: {exc}')
+                            
+            except Exception as e:
+                logger.error(f"LLM generation failed: {e}")
+                return self.generate_fallback_html_resume()
+            
+            # Check if we got enough content
+            if len(results) < 2:  # Need at least header and one section
+                logger.warning("Insufficient content from LLM, using fallback")
+                return self.generate_fallback_html_resume()
+                
+            full_resume = "<body>\n"
+            full_resume += f"  {results.get('header', '')}\n"
+            full_resume += "  <main>\n"
+            full_resume += f"    {results.get('education', '')}\n"
+            full_resume += f"    {results.get('work_experience', '')}\n"
+            full_resume += f"    {results.get('projects', '')}\n"
+            full_resume += f"    {results.get('achievements', '')}\n"
+            full_resume += f"    {results.get('certifications', '')}\n"
+            full_resume += f"    {results.get('additional_skills', '')}\n"
+            full_resume += "  </main>\n"
+            full_resume += "</body>"
+            
+            # Final check - if content is too short, use fallback
+            if len(full_resume.strip()) < 500:
+                logger.warning("Generated content too short, using fallback")
+                return self.generate_fallback_html_resume()
+                
+            return full_resume
+            
+        except Exception as e:
+            logger.error(f"HTML generation failed completely: {e}")
+            return self.generate_fallback_html_resume()

@@ -7,7 +7,7 @@ import textwrap
 from ..utils import LoggerChatModel
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_ollama import ChatOllama
 from pathlib import Path
 from dotenv import load_dotenv
 from requests.exceptions import HTTPError as HTTPStatusError
@@ -26,8 +26,7 @@ logger.add(log_path / "gpt_cover_letter_job_descr.log", rotation="1 day", compre
 
 class LLMCoverLetterJobDescription:
     def __init__(self, openai_api_key, strings):
-        self.llm_cheap = LoggerChatModel(ChatOpenAI(model_name="gpt-4o-mini", openai_api_key=openai_api_key, temperature=0.4))
-        self.llm_embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+        self.llm_cheap = LoggerChatModel(ChatOllama(model="gemma3:1b", base_url="http://localhost:11434", temperature=0.4))
         self.strings = strings
 
     @staticmethod

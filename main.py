@@ -468,6 +468,86 @@ def create_resume_pdf(parameters: dict, llm_api_key: str):
         raise
 
         
+def run_job_application_bot(parameters: dict, llm_api_key: str):
+    """
+    Run the enhanced LinkedIn job application bot.
+    """
+    try:
+        logger.info("Starting LinkedIn Job Application Bot...")
+        
+        # Load LinkedIn credentials
+        with open(Path("data_folder/secrets.yaml"), 'r') as f:
+            secrets = yaml.safe_load(f)
+        
+        linkedin_email = secrets.get("linkedin_email")
+        linkedin_password = secrets.get("linkedin_password")
+        
+        if not linkedin_email or not linkedin_password:
+            logger.error("LinkedIn credentials not found in secrets.yaml")
+            print("\n❌ Error: LinkedIn credentials not found in secrets.yaml")
+            print("Please add linkedin_email and linkedin_password to your secrets.yaml file.")
+            return
+        
+        # Initialize resume components
+        with open(parameters["uploads"]["plainTextResume"], "r") as f:
+            plain_text_resume = f.read()
+        
+        resume_object = Resume(plain_text_resume)
+        style_manager = StyleManager()
+        resume_generator = ResumeGenerator()
+        resume_generator.set_resume_object(resume_object)
+        
+        # Initialize resume facade
+        resume_facade = ResumeFacade(
+            api_key=llm_api_key,
+            style_manager=style_manager,
+            resume_generator=resume_generator,
+            resume_object=resume_object,
+            output_path=parameters["outputFileDirectory"],
+        )
+        
+        # Import and run the enhanced LinkedIn bot
+        from linkedin_job_application_bot import EnhancedLinkedInBot
+        
+        # Initialize enhanced LinkedIn bot
+        bot = EnhancedLinkedInBot(
+            email=linkedin_email,
+            password=linkedin_password,
+            work_preferences=parameters,
+            resume_facade=resume_facade
+        )
+        
+        # Run continuous job application
+        print("\n🤖 Starting LinkedIn Job Application Bot...")
+        print("This may take a while. Check the logs for detailed progress.")
+        
+        results = bot.run_continuous_job_application()
+        
+        # Print final results
+        print(f"\n{'='*60}")
+        print(f"JOB APPLICATION BOT RESULTS")
+        print(f"{'='*60}")
+        print(f"Total jobs found: {results['total_found']}")
+        print(f"Successful applications: {results['applied']}")
+        print(f"Failed applications: {results['failed']}")
+        print(f"Search cycles: {results['search_cycles']}")
+        print(f"Success rate: {(results['applied']/max(results['total_found'], 1)*100):.1f}%")
+        print(f"{'='*60}")
+        
+        if results['applied'] > 0:
+            print(f"\n✅ Successfully applied to {results['applied']} jobs!")
+            print(f"Check the 'job_applications' folder for application records.")
+        else:
+            print(f"\n❌ No applications were submitted.")
+            print(f"Check the logs for more details on what went wrong.")
+        
+    except Exception as e:
+        logger.exception(f"An error occurred while running the job application bot: {e}")
+        print(f"\n❌ Error running job application bot: {str(e)}")
+        print(f"Check the logs for more details.")
+        raise
+
+
 def handle_inquiries(selected_actions: List[str], parameters: dict, llm_api_key: str):
     """
     Decide which function to call based on the selected user actions.
@@ -489,6 +569,10 @@ def handle_inquiries(selected_actions: List[str], parameters: dict, llm_api_key:
             if "Generate Tailored Cover Letter for Job Description" == selected_actions:
                 logger.info("Designing a personalized cover letter to enhance your job application...")
                 create_cover_letter(parameters, llm_api_key)
+                
+            if "Run LinkedIn Job Application Bot" == selected_actions:
+                logger.info("Starting LinkedIn Job Application Bot...")
+                run_job_application_bot(parameters, llm_api_key)
 
         else:
             logger.warning("No actions selected. Nothing to execute.")
@@ -511,6 +595,7 @@ def prompt_user_action() -> str:
                     "Generate Resume",
                     "Generate Resume Tailored for Job Description",
                     "Generate Tailored Cover Letter for Job Description",
+                    "Run LinkedIn Job Application Bot",
                 ],
             ),
         ]
